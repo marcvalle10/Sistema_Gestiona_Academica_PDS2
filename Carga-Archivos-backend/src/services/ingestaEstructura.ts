@@ -198,6 +198,14 @@ export async function ingestaEstructura(rows: FilaEstructura[], archivoId: numbe
         promedioPeriodo: asNumber(r.promPeriodo),
         nivelInglesActual: r.nivelIngles ?? null,
         correo: r.correo ?? null,
+        aprobadas: r.matAprobadas ?? 0,
+        reprobadas: r.matReprobadas ?? 0,
+        periodoInicio: r.periodoInicio ?? null,
+        actaExamen: r.actaExamen ?? null,
+        constanciaExencion: r.constanciaExencion ?? null,
+        fechaTitulacion: r.fechaTitulacion ?? null, 
+        creditosCulturest: r.creditosCultruest ?? 0,
+        creditosDeportes: r.creditosDeportes ?? 0,
       };
       alumno = repoAlumno.create(nuevo);
     } else {
@@ -223,6 +231,14 @@ export async function ingestaEstructura(rows: FilaEstructura[], archivoId: numbe
       alumno.promedioPeriodo = asNumber(r.promPeriodo) ?? alumno.promedioPeriodo ?? null;
       alumno.nivelInglesActual = r.nivelIngles ?? alumno.nivelInglesActual ?? null;
       alumno.correo = r.correo ?? alumno.correo ?? null;
+      alumno.aprobadas = r.matAprobadas ?? alumno.aprobadas ?? 0;
+      alumno.reprobadas = r.matReprobadas ?? alumno.reprobadas ?? 0;
+      alumno.periodoInicio = r.periodoInicio ?? alumno.periodoInicio ?? null;
+      alumno.actaExamen = r.actaExamen ?? alumno.actaExamen ?? null;
+      alumno.constanciaExencion = r.constanciaExencion ?? alumno.constanciaExencion ?? null;
+      alumno.fechaTitulacion = r.fechaTitulacion ?? alumno.fechaTitulacion ?? null;
+      alumno.creditosCulturest = r.creditosCultruest ?? alumno.creditosCulturest ?? 0;
+      alumno.creditosDeportes = r.creditosDeportes ?? alumno.creditosDeportes ?? 0;
     }
 
     await repoAlumno.save(alumno);

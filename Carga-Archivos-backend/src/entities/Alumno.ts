@@ -54,6 +54,31 @@ export class Alumno {
   @Column({ name: "promedio_periodo", type: "numeric", precision: 5, scale: 2, nullable: true })
   promedioPeriodo!: number | null;
 
+  @Column({ name: "mat_aprobadas", type: "int", default: 0 })
+  aprobadas!: number;
+
+  @Column({ name: "mat_reprobadas" ,type: "int", default: 0 })
+  reprobadas!: number;
+
+  @Column({ name: "periodo_inicio", type: "text", nullable: true })
+  periodoInicio!: string | null;
+
+  @Column({ name: "acta_examen", type: "text", nullable: true })
+  actaExamen!: string | null;
+
+  @Column({ name: "constancia_exencion", type: "text", nullable: true })
+  constanciaExencion!: string | null;
+
+  @Column({ name: "fecha_titulacion", type: "date", nullable: true })
+  fechaTitulacion!: Date | null;
+
+  @Column({ name: "creditos_culturest", type: "numeric", precision: 5, scale:2, nullable: true })
+  creditosCulturest!: number | null;
+
+  
+  @Column({ name: "creditos_deportes", type: "numeric", precision: 5, scale:2, nullable: true })
+  creditosDeportes!: number | null;
+
   // Relación con PlanEstudio: NO declares plan_estudio_id como columna aparte.
   @ManyToOne(() => PlanEstudio, { nullable: true })
   @JoinColumn({ name: "plan_estudio_id" })
