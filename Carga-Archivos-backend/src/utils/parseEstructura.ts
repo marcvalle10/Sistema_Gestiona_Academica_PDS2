@@ -15,6 +15,14 @@ export type FilaEstructura = {
   promPeriodo: number|null;
   nivelIngles: string|null;    // ej. "4-2121", "5-2202", "N-0"
   correo?: string|null;        // opcional si lo quieres mapear ahora
+  matAprobadas?: number|null;
+  matReprobadas?: number|null;
+  periodoInicio?: string|null;
+  actaExamen?: string|null;
+  constanciaExencion?: string|null;
+  fechaTitulacion?: Date|null;
+  creditosCultruest?: number|null;
+  creditosDeportes?: number|null;
 };
 
 const normalizaHeader = (h?: string) => (h || '')
