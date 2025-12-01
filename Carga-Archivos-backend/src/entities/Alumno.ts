@@ -54,19 +54,20 @@ export class Alumno {
   @Column({ name: "promedio_periodo", type: "numeric", precision: 5, scale: 2, nullable: true })
   promedioPeriodo!: number | null;
 
-  @Column({ name: "mat_aprobadas", type: "int", default: 0 })
+  // Nuevos campos añadidos
+  @Column({ name: "materias_aprobadas", type: "int", default: 0 })
   aprobadas!: number;
 
-  @Column({ name: "mat_reprobadas" ,type: "int", default: 0 })
+  @Column({ name: "materias_reprobadas" ,type: "int", default: 0 })
   reprobadas!: number;
 
   @Column({ name: "periodo_inicio", type: "text", nullable: true })
   periodoInicio!: string | null;
 
-  @Column({ name: "acta_examen", type: "text", nullable: true })
+  @Column({ name: "acta_examen_profesional", type: "text", nullable: true })
   actaExamen!: string | null;
 
-  @Column({ name: "constancia_exencion", type: "text", nullable: true })
+  @Column({ name: "constancia_exencion_examen_profesional", type: "text", nullable: true })
   constanciaExencion!: string | null;
 
   @Column({ name: "fecha_titulacion", type: "date", nullable: true })
