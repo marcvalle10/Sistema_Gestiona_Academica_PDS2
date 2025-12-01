@@ -13,9 +13,13 @@ const mapDia = (dia: number) => {
   return dias[dia % 7] || "";
 };
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const { id } = await params; // Esperamos la promesa de params
+    // ⬅️ En Next 15, params viene como Promise
+    const { id } = await context.params;
 
     // 1. Obtener datos básicos del grupo y materia
     const queryGrupo = `
@@ -49,10 +53,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     let horarioStr = "";
     const aulas = new Set<string>();
 
-    const partesHorario = resHorario.rows.map(h => {
-      if (h.aula) aulas.add(h.aula);
-      return `${mapDia(h.dia_semana)} ${formatTime(h.hora_inicio)}-${formatTime(h.hora_fin)}`;
-    });
+    const partesHorario = resHorario.rows.map(
+      (h: {
+        dia_semana: number;
+        hora_inicio: string;
+        hora_fin: string;
+        aula: string | null;
+      }) => {
+        if (h.aula) aulas.add(h.aula);
+        return `${mapDia(h.dia_semana)} ${formatTime(h.hora_inicio)}-${formatTime(
+          h.hora_fin
+        )}`;
+      }
+    );
 
     horarioStr = partesHorario.join(", ");
     const aulaStr = Array.from(aulas).join(" / "); // Por si tiene varias aulas
@@ -61,9 +74,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       materia: `${grupo.materia_codigo} - ${grupo.materia_nombre}`,
       grupo: `${grupo.clave_grupo}`,
       aula: aulaStr || "Sin asignar",
-      horario: `Horario: ${horarioStr || "Pendiente"}`
+      horario: `Horario: ${horarioStr || "Pendiente"}`,
     });
-
   } catch (error) {
     console.error("Error obteniendo detalles del grupo:", error);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });

@@ -3,7 +3,7 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
 import { AlumnoFaltas, getSemaforo } from '@/types/alertas';
-import { StatusDot } from '@/Components/UI/StatusDot';
+import { StatusDot } from '@/components/ui/StatusDot';
 import clsx from 'clsx';
 
 type Props = {

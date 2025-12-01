@@ -71,6 +71,16 @@ export function MainApplication() {
     (user.appRoles?.some((r) => r.toUpperCase() === "ADMINISTRADOR") ||
       user.roles?.some((r) => r.toUpperCase() === "ADMINISTRADOR"));
 
+  // ADMIN o COORDINADOR pueden ver el botón de ir al módulo de profesores
+  const canAccessProfModule =
+    !!user &&
+    (user.appRoles?.some((r) =>
+      ["ADMINISTRADOR", "COORDINADOR"].includes(r.toUpperCase())
+    ) ||
+      user.roles?.some((r) =>
+        ["ADMINISTRADOR", "COORDINADOR"].includes(r.toUpperCase())
+      ));
+
   // Si no puede ver Roles y la pestaña actual es "roles", mover a "historico"
   useEffect(() => {
     if (!checkingAuth && user && !canViewRoles && activeTab === "roles") {
@@ -121,6 +131,7 @@ export function MainApplication() {
           activeTab={activeTab}
           onTabChange={handleTabChange}
           canViewRoles={canViewRoles}
+          canAccessProfModule={canAccessProfModule}
         />
 
         {/* Main Content */}
