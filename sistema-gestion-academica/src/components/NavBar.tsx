@@ -168,13 +168,13 @@ export default function NavBar({ className, azul, dorado }: Props) {
 
         {/* --- DERECHA: BOTÓN CARGA DE ARCHIVOS + ICONOS (Notificaciones + Usuario) --- */}
         <div className="flex items-center gap-4">
-          {/* Botón para ir a Carga de Archivos (solo ADMIN / COORDINADOR) */}
+          {/* Botón azul para ir a Carga de Archivos (solo ADMIN / COORDINADOR) */}
           {canAccessCargaArchivos && (
             <button
               onClick={handleGoToCargaArchivos}
               className="px-3 py-2 text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
             >
-              Coordinadores
+              Carga de Archivos
             </button>
           )}
 
