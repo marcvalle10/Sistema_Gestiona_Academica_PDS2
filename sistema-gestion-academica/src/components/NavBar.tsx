@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { UserCircle } from "lucide-react";
+import { UserCircle, LogOut, User } from "lucide-react"; // Agregué iconos extra
 import NotificationBell from "@/components/ui/NotificationBell";
 
 // Hook personalizado para obtener la ruta actual
@@ -22,7 +22,10 @@ type Props = {
   dorado: string;
 };
 
+// Ajustado según tu captura de pantalla
 type UserData = {
+  id?: number;
+  profesorId?: number;
   nombre?: string;
   email?: string;
   roles?: string[];
@@ -34,7 +37,12 @@ const CARGA_ARCHIVOS_URL =
 export default function NavBar({ className, azul, dorado }: Props) {
   const pathname = useClientPathname();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  // Nuevo estado para el menú del usuario
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  
   const [user, setUser] = useState<UserData | null>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const menuItems = [
     { href: "/inicio", label: "Inicio", id: "inicio" },
@@ -57,12 +65,12 @@ export default function NavBar({ className, azul, dorado }: Props) {
     { href: "/alertas-faltas", label: "Alertas por Faltas", id: "alertas" },
   ];
 
-  // Leer usuario desde localStorage (login de profesores)
+  // Leer usuario desde localStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     try {
-      const raw = window.localStorage.getItem("sgi-user");
+      const raw = window.localStorage.getItem("user");
       if (!raw) {
         setUser(null);
         return;
@@ -75,14 +83,39 @@ export default function NavBar({ className, azul, dorado }: Props) {
     }
   }, []);
 
+  // Cerrar el menú de usuario si se hace clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleMenuClick = (id: string, hasDropdown: boolean) => {
     if (hasDropdown) setOpenDropdown(openDropdown === id ? null : id);
     else setOpenDropdown(null);
   };
 
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      // Borrar datos de sesión
+      window.localStorage.removeItem("user");
+      window.localStorage.removeItem("sgi-user"); // Por si acaso quedó la vieja
+      window.localStorage.removeItem("token"); // Si usas token
+      
+      // Redirigir al login
+      window.location.href = "/";
+    }
+  };
+
   // Solo ADMINISTRADOR o COORDINADOR pueden ver el botón de Carga de Archivos
   const canAccessCargaArchivos =
-    !!user?.roles?.some((r) =>
+    !!user?.roles &&
+    Array.isArray(user.roles) &&
+    user.roles.some((r) =>
       ["ADMINISTRADOR", "COORDINADOR"].includes(r.toUpperCase())
     );
 
@@ -98,7 +131,7 @@ export default function NavBar({ className, azul, dorado }: Props) {
       style={{ backgroundColor: dorado, borderTop: `6px solid ${azul}` }}
     >
       <div className="max-w-7xl mx-auto px-8 w-full flex justify-between items-center">
-        {/* --- IZQUIERDA: MENÚ --- */}
+        {/* --- IZQUIERDA: MENÚ DE NAVEGACIÓN --- */}
         <ul className="flex justify-start gap-8">
           {menuItems.map((item) => {
             // @ts-ignore
@@ -166,9 +199,9 @@ export default function NavBar({ className, azul, dorado }: Props) {
           })}
         </ul>
 
-        {/* --- DERECHA: BOTÓN CARGA DE ARCHIVOS + ICONOS (Notificaciones + Usuario) --- */}
+        {/* --- DERECHA: BOTONES Y PERFIL --- */}
         <div className="flex items-center gap-4">
-          {/* Botón azul para ir a Carga de Archivos (solo ADMIN / COORDINADOR) */}
+          {/* Botón Carga de Archivos */}
           {canAccessCargaArchivos && (
             <button
               onClick={handleGoToCargaArchivos}
@@ -181,12 +214,47 @@ export default function NavBar({ className, azul, dorado }: Props) {
           {/* Campana de Alertas */}
           <NotificationBell />
 
-          {/* Icono de Usuario */}
-          <Link href="/configuracion-perfil">
-            <div className="text-white hover:text-black transition cursor-pointer p-1">
+          {/* Icono de Usuario con Menú Desplegable (Logout) */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="text-white hover:text-black transition cursor-pointer p-1 focus:outline-none flex items-center"
+            >
               <UserCircle className="w-8 h-8" />
-            </div>
-          </Link>
+            </button>
+
+            {/* Dropdown del Usuario */}
+            {isUserMenuOpen && (
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
+                
+                {/* Nombre del usuario (opcional, visual) */}
+                {user?.nombre && (
+                  <div className="px-4 py-2 border-b border-gray-100 mb-1">
+                    <p className="text-xs text-gray-500 font-semibold truncate">
+                      {user.nombre}
+                    </p>
+                  </div>
+                )}
+
+                <Link
+                  href="/configuracion-perfil"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-indigo-600 transition-colors"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <User className="w-4 h-4" />
+                  Mi Perfil
+                </Link>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Cerrar Sesión
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
