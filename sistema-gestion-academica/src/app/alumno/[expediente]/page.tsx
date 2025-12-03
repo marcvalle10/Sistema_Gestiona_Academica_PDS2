@@ -20,7 +20,6 @@ interface StudentData {
   records: AcademicRecord[];
 }
 
-
 const SkeletonLoader = () => (
   <div className="animate-pulse space-y-4">
     <div className="h-8 bg-gray-200 rounded w-3/4"></div>
@@ -30,6 +29,28 @@ const SkeletonLoader = () => (
 );
 
 const COLORS = ['#00C49F', '#FF8042'];
+
+const ALUMNOS_FRONTEND_URL = process.env.NEXT_PUBLIC_ALUMNOS_URL || 'http://localhost:3001';
+
+// --- Tooltip Personalizado ---
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border border-gray-200 shadow-xl rounded-lg z-50">
+        <p className="font-bold text-gray-800 text-sm mb-1">{data.subject}</p>
+        <div className="text-xs text-gray-600 space-y-1">
+            <p>Calificación: <span className="font-semibold text-gray-900">{data.grade}</span></p>
+            <p>Semestre: {data.semester}</p>
+            <p className={`font-semibold ${data.status === 'Reprobada' ? 'text-red-600' : 'text-green-600'}`}>
+                {data.status}
+            </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function StudentProfilePage() {
   const params = useParams();
@@ -70,11 +91,22 @@ export default function StudentProfilePage() {
     fetchStudentData();
   }, [expedienteParam]);
 
+  const handleOpenStudentView = () => {
+    if (!studentData) return;
+    const targetUrl = `${ALUMNOS_FRONTEND_URL}/kardex?expediente=${studentData.expediente}`;
+    window.open(targetUrl, "_blank");
+  };
+
   const getFilteredData = () => {
     if (!studentData) return [];
     return selectedSemester === 'all'
       ? studentData.records
       : studentData.records.filter(record => record.semester === selectedSemester);
+  };
+
+  const getFailedSubjects = () => {
+    const data = getFilteredData();
+    return data.filter(record => record.status === 'Reprobada');
   };
 
   const calculateAverage = () => {
@@ -100,6 +132,8 @@ export default function StudentProfilePage() {
     return ['all', ...semesters];
   };
 
+  const isAllSemesters = selectedSemester === 'all';
+
   if (isLoading) return <div className="min-h-screen bg-gray-50 p-6"><SkeletonLoader /></div>;
 
   if (error || !studentData) {
@@ -119,29 +153,48 @@ export default function StudentProfilePage() {
     );
   }
 
+  const failedSubjectsList = getFailedSubjects();
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
+        
         {/* Encabezado */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6 flex justify-between items-start">
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">{studentData.name}</h1>
             <p className="text-lg text-gray-600">Expediente: {studentData.expediente}</p>
             <p className="text-md text-gray-500">Grupo: {studentData.currentGroup} | Correo: {studentData.email}</p>
           </div>
-          <Link href="/calificaciones/consultar-calificaciones" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition">
-            ← Nueva Búsqueda
-          </Link>
+          
+          <div className="flex flex-col gap-2 w-full md:w-auto">
+            <Link 
+                href="/calificaciones/consultar-calificaciones" 
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition text-center"
+            >
+                ← Nueva Búsqueda
+            </Link>
+            
+            <button
+                onClick={handleOpenStudentView}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md transition shadow-sm flex items-center justify-center gap-2"
+            >
+                <span>Consultar Vista de Alumno</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Selector de Semestre */}
+        {/* Filtro */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">Filtrar por Semestre</label>
           <select
             id="semester"
             value={selectedSemester}
             onChange={(e) => setSelectedSemester(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
           >
             {getUniqueSemesters().map(sem => (
               <option key={sem} value={sem}>
@@ -151,8 +204,8 @@ export default function StudentProfilePage() {
           </select>
         </div>
 
-        {/* Panel de Resumen */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Resumen */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="bg-blue-50 p-6 rounded-lg text-center">
             <h3 className="text-lg font-semibold text-blue-800">Promedio General</h3>
             <p className="text-3xl font-bold text-blue-600 mt-2">{calculateAverage()}</p>
@@ -167,42 +220,105 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
+        {/* Alerta Reprobadas */}
+        {failedSubjectsList.length > 0 && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-8 rounded-r-lg shadow-sm">
+            <h3 className="text-red-800 font-bold text-lg mb-2 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Atención: Materias Reprobadas Detectadas
+            </h3>
+            <ul className="list-disc list-inside space-y-1 ml-1">
+              {failedSubjectsList.map((subject, idx) => (
+                <li key={idx} className="text-red-700">
+                  <span className="font-semibold">{subject.subject}</span> 
+                  <span className="text-sm text-red-600 ml-2">
+                    (Semestre: {subject.semester} - Calificación: {subject.grade})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Gráficos */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8 h-80">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Calificaciones por Materia</h2>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={getFilteredData()}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="subject" />
-              <YAxis domain={[0, 100]} /> {/* Calificación en 0-100 */}
-              <Tooltip />
-              <Bar dataKey="grade" fill="#3B82F6" />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="grid grid-cols-1 gap-8"> 
+            
+            {/* 1. Gráfica de Barras */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Calificaciones por Materia</h2>
+                
+                <div className="w-full h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart 
+                          data={getFilteredData()}
+                          margin={{ top: 20, right: 10, left: 0, bottom: 40 }} 
+                      >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis 
+                            dataKey="subject" 
+                            interval={0}
+                            tick={{fontSize: 10, fill: '#6B7280'}} 
+                            angle={-45} 
+                            textAnchor="end" 
+                            height={40} 
+                            dy={5}
+                            tickFormatter={(val) => val.length > 7 ? `${val.substring(0, 7)}...` : val}
+                          /> 
+                          <YAxis domain={[0, 100]} width={40} tickLine={false} axisLine={false} /> 
+                          
+                          {/* Tooltip personalizado que SIEMPRE muestra la info real */}
+                          <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f3f4f6' }} />
+
+                          {/* AQUÍ ESTÁ EL FIX: 
+                             minPointSize={10} obliga a que la barra tenga altura aunque el valor sea 0.
+                             Esto hace que el mouse pueda "tocar" la barra y mostrar el tooltip.
+                          */}
+                          <Bar 
+                            dataKey="grade" 
+                            radius={[4, 4, 0, 0]} 
+                            minPointSize={10} 
+                          >
+                            {getFilteredData().map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.status === 'Reprobada' ? '#EF4444' : '#3B82F6'} 
+                              />
+                            ))}
+                          </Bar>
+                      </BarChart>
+                  </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* 2. Gráfica de Pastel */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Distribución de Materias</h2>
+                <div className="w-full h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                          <Pie
+                              data={countByStatus()}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={true}
+                              outerRadius={60} 
+                              fill="#8884d8"
+                              dataKey="value"
+                              label={({ name, percent }) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
+                          >
+                              {countByStatus().map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                          </Pie>
+                          <Tooltip />
+                      </PieChart>
+                  </ResponsiveContainer>
+                </div>
+            </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6 h-80">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Distribución de Materias</h2>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={countByStatus()}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
-                outerRadius={80}
-                fill="#010008ff"
-                dataKey="value"
-              >
-                {countByStatus().map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
       </div>
     </div>
   );
