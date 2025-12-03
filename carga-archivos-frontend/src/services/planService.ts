@@ -4,6 +4,11 @@ import { PlanRecord } from "@/types";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+  async function safeJson<T>(resp: Response): Promise<T> {
+  const data = (await resp.json()) as unknown;
+  return data as T;
+}
+
 // === RAW TYPES QUE VIENEN DE SUPABASE ===
 
 type PlanRow = {
@@ -46,6 +51,40 @@ function mapMateriaToPlanRecord(row: MateriaRow): PlanRecord {
     plan_semestres_sugeridos: plan?.semestres_sugeridos ?? null,
   };
 }
+
+
+export async function getPlanHistorial(
+  limit = 50
+): Promise<PlanHistorialItem[]> {
+  const url = new URL(`${API_BASE}/plan/historial`);
+  url.searchParams.set("limit", String(limit));
+
+  const resp = await fetch(url.toString(), {
+    method: "GET",
+  });
+
+  if (!resp.ok) {
+    throw new Error("Error al obtener historial de plan de estudios");
+  }
+
+  const json = await safeJson<PlanHistorialResponse>(resp);
+
+  return Array.isArray(json.items) ? json.items : [];
+}
+
+
+export interface PlanHistorialItem {
+  id: number;
+  fecha: string;          // ISO string
+  nombre_archivo: string;
+  estado: string;
+}
+
+type PlanHistorialResponse = {
+  ok?: boolean;
+  items?: PlanHistorialItem[];
+};
+
 
 
 // === CATÁLOGO DE PLANES ===

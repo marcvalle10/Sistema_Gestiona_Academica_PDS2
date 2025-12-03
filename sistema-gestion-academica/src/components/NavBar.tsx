@@ -205,7 +205,7 @@ export default function NavBar({ className, azul, dorado }: Props) {
           {canAccessCargaArchivos && (
             <button
               onClick={handleGoToCargaArchivos}
-              className="px-3 py-2 text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+              className="px-3 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
             >
               Carga de Archivos
             </button>

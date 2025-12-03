@@ -16,11 +16,11 @@ import {
   deleteHorario,
 } from "@/services/scheduleService";
 import { ScheduleRecord } from "@/types";
-import ScheduleUploadPanel from "./components/ScheduleUploadPanel";
-import ScheduleTable from "./ScheduleTable";
 
 // Exportar a Excel
 import * as XLSX from "xlsx";
+import ScheduleUploadPanel from "./components/ScheduleUploadPanel";
+import ScheduleTable from "./ScheduleTable";
 
 type ViewMode = "empty" | "table" | "upload";
 type EditMode = "edit" | "create" | null;
@@ -31,6 +31,14 @@ type HistorialItemUI = {
   nombre: string;
   estado: string;
 };
+
+type AlertState = {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+} | null;
+
+
 
 const bentham = Bentham({
   weight: "400",
@@ -53,7 +61,9 @@ export default function ScheduleReportView() {
   const [editForm, setEditForm] = useState<Partial<ScheduleRecord>>({});
   const [showEditModal, setShowEditModal] = useState(false);
   const [editMode, setEditMode] = useState<EditMode>(null);
-
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState<ScheduleRecord | null>(null);
+  const [alert, setAlert] = useState<AlertState>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -118,7 +128,7 @@ export default function ScheduleReportView() {
 
   const formatearFechaCorta = (iso: string): string => {
     const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso; // por si acaso
+    if (Number.isNaN(d.getTime())) return iso;
 
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -159,38 +169,54 @@ export default function ScheduleReportView() {
   }, [viewMode]);
 
   const handleUpload = async () => {
-    if (!isiFile && !preFile) {
-      alert("Selecciona al menos un archivo (ISI o Prelistas)");
-      return;
+  if (!isiFile && !preFile) {
+    setAlert({
+      kind: "error",
+      title: "Archivos no seleccionados",
+      message:
+        "Selecciona al menos un archivo (ISI o Prelistas) para poder procesar los horarios.",
+    });
+    return;
+  }
+
+  try {
+    const uploadResp = await uploadHorarios(
+      isiFile ?? undefined,
+      preFile ?? undefined
+    );
+    const { archivoIdISI, archivoIdPrelistas } = uploadResp;
+
+    const procResp = await procesarHorarios(archivoIdISI, archivoIdPrelistas);
+    setResumen(procResp.resumen);
+
+    const updated = await getHorarios();
+    setHorarios(updated);
+
+    setViewMode("table");
+
+    setAlert({
+      kind: "success",
+      title: "Archivo procesado",
+      message:
+        "El archivo se procesó exitosamente y los horarios ya están disponibles en la tabla.",
+    });
+  } catch (err) {
+    console.error("Error al procesar horarios:", err);
+
+    let message = "Ocurrió un error al procesar los horarios.";
+    if (err instanceof Error && err.message) {
+      message = `Ocurrió un error al procesar los horarios: ${err.message}`;
     }
 
-    try {
-      const uploadResp = await uploadHorarios(
-        isiFile ?? undefined,
-        preFile ?? undefined
-      );
-      const { archivoIdISI, archivoIdPrelistas } = uploadResp;
+    setAlert({
+      kind: "error",
+      title: "Error al procesar horarios",
+      message,
+    });
+  }
+};
 
-      const procResp = await procesarHorarios(archivoIdISI, archivoIdPrelistas);
-      setResumen(procResp.resumen);
-
-      const updated = await getHorarios();
-      setHorarios(updated);
-
-      setViewMode("table");
-    } catch (err) {
-      console.error("Error al procesar horarios:", err);
-
-      let message = "Ocurrió un error al procesar los horarios.";
-      if (err instanceof Error && err.message) {
-        message = `Ocurrió un error al procesar los horarios: ${err.message}`;
-      }
-
-      alert(message);
-    }
-  };
-
-  // Filtro por búsqueda (materia, profe, grupo, periodo, aula, etc.)
+  // Filtro por búsqueda + filtros individuales
   const filtered = horarios.filter((r) => {
     const texto = `${r.periodo ?? ""} ${r.codigo_materia ?? ""} ${
       r.nombre_materia ?? ""
@@ -213,7 +239,13 @@ export default function ScheduleReportView() {
       filterNumEmpleado === "ALL" ||
       String(r.num_empleado ?? "") === filterNumEmpleado;
 
-    return texto && matchesPeriodo && matchesCodigo && matchesGrupo && matchesNumEmpleado;
+    return (
+      texto &&
+      matchesPeriodo &&
+      matchesCodigo &&
+      matchesGrupo &&
+      matchesNumEmpleado
+    );
   });
 
   const totalItems = filtered.length;
@@ -283,89 +315,136 @@ export default function ScheduleReportView() {
   };
 
   const handleSaveEdit = async () => {
-    // Validaciones básicas
-    if (
-      !editForm.periodo ||
-      !editForm.codigo_materia ||
-      !editForm.nombre_materia ||
-      !editForm.grupo
-    ) {
-      alert(
-        "Periodo, código, nombre de materia y grupo son obligatorios."
+  // Validaciones básicas
+  if (
+    !editForm.periodo ||
+    !editForm.codigo_materia ||
+    !editForm.nombre_materia ||
+    !editForm.grupo
+  ) {
+    setAlert({
+      kind: "error",
+      title: "Datos incompletos",
+      message:
+        "Periodo, código, nombre de materia y grupo son obligatorios. Verifica la información antes de continuar.",
+    });
+    return;
+  }
+
+  if (!editMode) return;
+
+  try {
+    if (editMode === "edit" && editingRecord) {
+      // EDITAR
+      const payload: Partial<ScheduleRecord> = {
+        ...editingRecord,
+        ...editForm,
+      };
+
+      const updated = await updateHorario(editingRecord.id, payload);
+
+      setHorarios((prev) =>
+        prev.map((h) => (h.id === editingRecord.id ? updated : h))
       );
-      return;
-    }
+    } else if (editMode === "create") {
+      // CREAR
+      const payload: Partial<ScheduleRecord> = {
+        periodo: editForm.periodo,
+        codigo_materia: editForm.codigo_materia,
+        nombre_materia: editForm.nombre_materia,
+        grupo: editForm.grupo,
+        dia_semana: editForm.dia_semana,
+        aula: editForm.aula,
+        hora_inicio: editForm.hora_inicio,
+        hora_fin: editForm.hora_fin,
+        num_empleado: editForm.num_empleado,
+        profesor_nombre: editForm.profesor_nombre,
+        profesor_apellido_paterno: editForm.profesor_apellido_paterno,
+        profesor_apellido_materno: editForm.profesor_apellido_materno,
+        cupo: editForm.cupo,
+      };
 
-    if (!editMode) return;
+      const created = await createHorario(payload);
 
-    try {
-      if (editMode === "edit" && editingRecord) {
-        // EDITAR
-        const payload: Partial<ScheduleRecord> = {
-          ...editingRecord,
-          ...editForm,
-        };
-
-        const updated = await updateHorario(editingRecord.id, payload);
-
-        setHorarios((prev) =>
-          prev.map((h) => (h.id === editingRecord.id ? updated : h))
-        );
-      } else if (editMode === "create") {
-        // CREAR
-        const payload: Partial<ScheduleRecord> = {
-          periodo: editForm.periodo,
-          codigo_materia: editForm.codigo_materia,
-          nombre_materia: editForm.nombre_materia,
-          grupo: editForm.grupo,
-          dia_semana: editForm.dia_semana,
-          aula: editForm.aula,
-          hora_inicio: editForm.hora_inicio,
-          hora_fin: editForm.hora_fin,
-          num_empleado: editForm.num_empleado,
-          profesor_nombre: editForm.profesor_nombre,
-          profesor_apellido_paterno: editForm.profesor_apellido_paterno,
-          profesor_apellido_materno: editForm.profesor_apellido_materno,
-          cupo: editForm.cupo,
-        };
-
-        const created = await createHorario(payload);
+      if (created) {
         setHorarios((prev) => [created, ...prev]);
-        setCurrentPage(1);
+      } else {
+        const updatedList = await getHorarios();
+        setHorarios(updatedList);
       }
 
-      handleCloseEditModal();
-    } catch (error) {
-      console.error("Error al guardar horario:", error);
-      alert("Ocurrió un error al guardar el horario.");
+      setCurrentPage(1);
     }
+
+    // Cerrar modal de edición
+    handleCloseEditModal();
+
+    // Mostrar alerta de éxito
+    setAlert({
+      kind: "success",
+      title:
+        editMode === "create" ? "Horario creado" : "Horario actualizado",
+      message:
+        editMode === "create"
+          ? "El horario se creó correctamente."
+          : "Los cambios del horario se guardaron correctamente.",
+    });
+  } catch (error) {
+    console.error("Error al guardar horario:", error);
+    setAlert({
+      kind: "error",
+      title: "Error al guardar horario",
+      message:
+        "Ocurrió un error al guardar el horario. Intenta nuevamente o contacta al administrador.",
+    });
+  }
+};
+
+
+  const handleDeleteClick = (record: ScheduleRecord) => {
+    setScheduleToDelete(record);
+    setShowDeleteModal(true);
   };
 
-  const handleDeleteClick = async (record: ScheduleRecord) => {
-    const confirmado = window.confirm(
-      `¿Seguro que deseas eliminar el horario del grupo ${record.grupo} (${record.nombre_materia})?`
-    );
-    if (!confirmado) return;
+  const confirmDelete = async () => {
+  if (!scheduleToDelete) return;
 
-    try {
-      await deleteHorario(record.id);
-      setHorarios((prev) => prev.filter((h) => h.id !== record.id));
-    } catch (error) {
-      console.error("Error al eliminar horario:", error);
-      alert("Ocurrió un error al eliminar el horario.");
-    }
-  };
+  try {
+    await deleteHorario(scheduleToDelete.id);
+    setHorarios((prev) => prev.filter((h) => h.id !== scheduleToDelete.id));
+
+    setAlert({
+      kind: "success",
+      title: "Horario eliminado",
+      message: "El horario fue eliminado correctamente.",
+    });
+  } catch (error) {
+    console.error("Error al eliminar horario:", error);
+    setAlert({
+      kind: "error",
+      title: "Error al eliminar horario",
+      message:
+        "Ocurrió un error al eliminar el horario. Intenta nuevamente más tarde.",
+    });
+  } finally {
+    setShowDeleteModal(false);
+    setScheduleToDelete(null);
+  }
+};
 
   const handleShowTable = () => setViewMode("table");
   const handleShowUpload = () => setViewMode("upload");
 
   const handleExport = () => {
     if (!filtered.length) {
-      alert("No hay registros para exportar.");
+      setAlert({
+        kind: "error",
+        title: "Sin registros",
+        message: "No hay registros para exportar.",
+      });
       return;
     }
 
-    // Armamos los datos como una tabla “bonita” para Excel
     const dataForExcel = filtered.map((r) => ({
       Periodo: r.periodo ?? "",
       CodigoMateria: r.codigo_materia ?? "",
@@ -382,16 +461,13 @@ export default function ScheduleReportView() {
       Cupo: r.cupo ?? "",
     }));
 
-    // Crear hoja y libro
     const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Horarios");
 
-    // Nombre de archivo con fecha
     const today = new Date().toISOString().slice(0, 10);
     const fileName = `horarios_${today}.xlsx`;
 
-    // Descargar
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -623,7 +699,6 @@ export default function ScheduleReportView() {
           </div>
         </div>
 
-
         {/* Tabla + resumen */}
         <div className="px-3 py-4">
           {resumen && (
@@ -790,10 +865,7 @@ export default function ScheduleReportView() {
                     type="text"
                     value={editForm.codigo_materia ?? ""}
                     onChange={(e) =>
-                      handleEditFieldChange(
-                        "codigo_materia",
-                        e.target.value
-                      )
+                      handleEditFieldChange("codigo_materia", e.target.value)
                     }
                     className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
                   />
@@ -808,10 +880,7 @@ export default function ScheduleReportView() {
                   type="text"
                   value={editForm.nombre_materia ?? ""}
                   onChange={(e) =>
-                    handleEditFieldChange(
-                      "nombre_materia",
-                      e.target.value
-                    )
+                    handleEditFieldChange("nombre_materia", e.target.value)
                   }
                   className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
                 />
@@ -875,10 +944,7 @@ export default function ScheduleReportView() {
                       placeholder="HH:MM"
                       value={editForm.hora_inicio ?? ""}
                       onChange={(e) =>
-                        handleEditFieldChange(
-                          "hora_inicio",
-                          e.target.value
-                        )
+                        handleEditFieldChange("hora_inicio", e.target.value)
                       }
                       className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
                     />
@@ -892,10 +958,7 @@ export default function ScheduleReportView() {
                       placeholder="HH:MM"
                       value={editForm.hora_fin ?? ""}
                       onChange={(e) =>
-                        handleEditFieldChange(
-                          "hora_fin",
-                          e.target.value
-                        )
+                        handleEditFieldChange("hora_fin", e.target.value)
                       }
                       className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
                     />
@@ -1013,8 +1076,162 @@ export default function ScheduleReportView() {
             </div>
           </div>
         </Modal>
+
+        {showDeleteModal && scheduleToDelete && (
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          title=""
+        >
+          <div className="text-center pt-1 py-4 px-8">
+            <div className="mb-4">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M16.875 3.75H13.75V3.125C13.75 2.62772 13.5525 2.15081 13.2008 1.79917C12.8492 1.44754 12.3723 1.25 11.875 1.25H8.125C7.62772 1.25 7.15081 1.44754 6.79917 1.79917C6.44754 2.15081 6.25 2.62772 6.25 3.125V3.75H3.125C2.95924 3.75 2.80027 3.81585 2.68306 3.93306C2.56585 4.05027 2.5 4.20924 2.5 4.375C2.5 4.54076 2.56585 4.69973 2.68306 4.81694C2.80027 4.93415 2.95924 5 3.125 5H3.75V16.25C3.75 16.5815 3.8817 16.8995 4.11612 17.1339C4.35054 17.3683 4.66848 17.5 5 17.5H15C15.3315 17.5 15.6495 17.3683 15.8839 17.1339C16.1183 16.8995 16.25 16.5815 16.25 16.25V5H16.875C17.0408 5 17.1997 4.93415 17.3169 4.81694C17.4342 4.69973 17.5 4.54076 17.5 4.375C17.5 4.20924 17.4342 4.05027 17.3169 3.93306C17.1997 3.81585 17.0408 3.75 16.875 3.75ZM7.5 3.125C7.5 2.95924 7.56585 2.80027 7.68306 2.68306C7.80027 2.56585 7.95924 2.5 8.125 2.5H11.875C12.0408 2.5 12.1997 2.56585 12.3169 2.68306C12.4342 2.80027 12.5 2.95924 12.5 3.125V3.75H7.5V3.125ZM15 16.25H5V5H15V16.25ZM8.75 8.125V13.125C8.75 13.2908 8.68415 13.4497 8.56694 13.5669C8.44973 13.6842 8.29076 13.75 8.125 13.75C7.95924 13.75 7.80027 13.6842 7.68306 13.5669C7.56585 13.4497 7.5 13.2908 7.5 13.125V8.125C7.5 7.95924 7.56585 7.80027 7.68306 7.68306C7.80027 7.56585 7.95924 7.5 8.125 7.5C8.29076 7.5 8.44973 7.56585 8.56694 7.68306C8.68415 7.80027 8.75 7.95924 8.75 8.125ZM12.5 8.125V13.125C12.5 13.2908 12.4342 13.4497 12.3169 13.5669C12.1997 13.6842 12.0408 13.75 11.875 13.75C11.7092 13.75 11.5503 13.6842 11.4331 13.5669C11.3158 13.4497 11.25 13.2908 11.25 13.125V8.125C11.25 7.95924 11.3158 7.80027 11.4331 7.68306C11.5503 7.56585 11.7092 7.5 11.875 7.5C12.0408 7.5 12.1997 7.56585 12.3169 7.68306C12.4342 7.80027 12.5 7.95924 12.5 8.125Z"
+                    fill="#DC3545"
+                  />
+                </svg>
+              </div>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Eliminar horario
+            </h3>
+            <div className="mx-4">
+              <p className="text-sm text-gray-600">
+                ¿Estás seguro de que quieres eliminar este horario?
+              </p>
+              {scheduleToDelete && (
+                <p className="text-sm text-gray-600 mb-2">
+                  <span className="font-semibold">
+                    {scheduleToDelete.nombre_materia}
+                  </span>{" "}
+                  — Grupo {scheduleToDelete.grupo}
+                </p>
+              )}
+              <p className="text-sm text-gray-600 mb-8">
+                Esta acción es permanente y no se podrá deshacer.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-8 rounded-2xl py-2 text-sm"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-2xl py-2 text-sm"
+              >
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        </Modal>
+        )}
+                {/* Modal de alerta genérico (éxito / error) */}
+        {alert && (
+          <Modal
+            isOpen={!!alert}
+            onClose={() => setAlert(null)}
+            title=""
+          >
+            <div className="text-center pt-1 py-4 px-8">
+              <div className="mb-4">
+                <div
+                  className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                    alert.kind === "success" ? "bg-green-100" : "bg-red-100"
+                  }`}
+                >
+                  {alert.kind === "success" ? (
+                    // Ícono de check
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M9 12.75L11.25 15L15 9.75"
+                        stroke="#16A34A"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="9"
+                        stroke="#16A34A"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                  ) : (
+                    // Ícono de error
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M10 18.3333C14.025 18.3333 17.5 14.8583 17.5 10.8333C17.5 6.80833 14.025 3.33333 10 3.33333C5.975 3.33333 2.5 6.80833 2.5 10.8333C2.5 14.8583 5.975 18.3333 10 18.3333Z"
+                        stroke="#DC2626"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M10 7.5V11.25"
+                        stroke="#DC2626"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M10 14.1667H10.0083"
+                        stroke="#DC2626"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </div>
+              </div>
+
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {alert.title}
+              </h3>
+              <p className="text-sm text-gray-600 mb-8">{alert.message}</p>
+
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => setAlert(null)}
+                  className="px-8 rounded-2xl py-2 text-sm bg-[#16469B] hover:bg-[#123670] text-white"
+                >
+                  Aceptar
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        
       </div>
+      
     );
+    
   }
 
   // =================== VISTA CARGA + HISTORIAL ===================
@@ -1113,6 +1330,95 @@ export default function ScheduleReportView() {
                   </div>
                 </div>
               ))}
+              {/* Modal de alerta genérico (éxito / error) */}
+              {alert && (
+                <Modal
+                  isOpen={!!alert}
+                  onClose={() => setAlert(null)}
+                  title=""
+                >
+                  <div className="text-center pt-1 py-4 px-8">
+                    <div className="mb-4">
+                      <div
+                        className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                          alert.kind === "success" ? "bg-green-100" : "bg-red-100"
+                        }`}
+                      >
+                        {alert.kind === "success" ? (
+                          // Ícono de check
+                          <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M9 12.75L11.25 15L15 9.75"
+                              stroke="#16A34A"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle
+                              cx="12"
+                              cy="12"
+                              r="9"
+                              stroke="#16A34A"
+                              strokeWidth="2"
+                            />
+                          </svg>
+                        ) : (
+                          // Ícono de error
+                          <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M10 18.3333C14.025 18.3333 17.5 14.8583 17.5 10.8333C17.5 6.80833 14.025 3.33333 10 3.33333C5.975 3.33333 2.5 6.80833 2.5 10.8333C2.5 14.8583 5.975 18.3333 10 18.3333Z"
+                              stroke="#DC2626"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M10 7.5V11.25"
+                              stroke="#DC2626"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M10 14.1667H10.0083"
+                              stroke="#DC2626"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {alert.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-8">{alert.message}</p>
+
+                    <div className="flex justify-center">
+                      <Button
+                        onClick={() => setAlert(null)}
+                        className="px-8 rounded-2xl py-2 text-sm bg-[#16469B] hover:bg-[#123670] text-white"
+                      >
+                        Aceptar
+                      </Button>
+                    </div>
+                  </div>
+                </Modal>
+              )}
             </div>
           </div>
         </div>

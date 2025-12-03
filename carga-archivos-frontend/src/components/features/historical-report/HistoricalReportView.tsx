@@ -36,8 +36,21 @@ export function HistoricalReportView() {
   const [editingRecord, setEditingRecord] = useState<HistoricalRecord | null>(
     null
   );
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<HistoricalRecord | null>(
+    null
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editMode, setEditMode] = useState<"create" | "edit">("create");
+  
+  type AlertModalState = {
+    type: "success" | "error";
+    title: string;
+    message: string;
+  };
 
+  const [alertModal, setAlertModal] = useState<AlertModalState | null>(null);
+  
   const itemsPerPage = 10;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -98,77 +111,178 @@ export function HistoricalReportView() {
     []
   );
 
-  const handleUpload = async () => {
-    if (!uploadedFile) {
-      console.warn("No file selected");
-      return;
-    }
-
-    console.log("Uploading file:", uploadedFile.name);
+  const handleUpload = async (fileParam?: File) => {
+    // Usar el archivo pasado por parámetro o el que está en el estado
+    const fileToUpload = fileParam ?? uploadedFile;
+    if (!fileToUpload) return;
 
     try {
-      // TODO: cambiar a endpoint real
       await uploadFile(
         "http://localhost:5000/estructura/upload",
-        uploadedFile,
+        fileToUpload,
         "file"
       );
 
-      refreshFiles();
+      await Promise.all([
+        refreshStudents(),
+        refreshFiles(),
+      ]);
+
+      setUploadedFile(null);
+      setShowUploadModal(false);
+
+      setAlertModal({
+        type: "success",
+        title: "Archivo procesado",
+        message:
+          "El archivo se procesó exitosamente y los registros ya están en la tabla.",
+      });
     } catch (err) {
-      console.error("Upload error:", err);
+      console.error("Error al subir archivo (historial):", err);
+
+      setAlertModal({
+        type: "error",
+        title: "Error al procesar archivo",
+        message:
+          "No se pudo procesar el archivo del historial. Verifica el archivo e intenta nuevamente.",
+      });
     }
   };
+
 
   const handleShowHistory = () => {
     setShowHistoryTable(true);
     setShowCombinedView(false);
+
+    // 🔽 cerrar modal y limpiar edición
+    setIsModalOpen(false);
+    setEditingRecord(null);
   };
 
   const handleShowCombinedView = () => {
     setShowCombinedView(true);
     setShowHistoryTable(false);
-  };
 
+    // 🔽 cerrar modal y limpiar edición
+    setIsModalOpen(false);
+    setEditingRecord(null);
+  };
   const handleCloseModal = () => {
     setShowUploadModal(false);
     setUploadedFile(null);
   };
 
-  const handleDeleteFile = (file: FileHistoryRecord) => {
-    removeFile(file);
-    refreshFiles();
+    const handleDeleteFile = async (file: FileHistoryRecord) => {
+    try {
+      await removeFile(file);
+      await refreshFiles();
+
+      // ✅ alerta de éxito
+      setAlertModal({
+        type: "success",
+        title: "Archivo eliminado",
+        message: "El archivo de historial se eliminó correctamente.",
+      });
+    } catch (err) {
+      console.error("Error al eliminar archivo de historial:", err);
+
+      // ❌ alerta de error
+      setAlertModal({
+        type: "error",
+        title: "Error al eliminar archivo",
+        message:
+          "No se pudo eliminar el archivo del historial. Intenta de nuevo más tarde.",
+      });
+    }
   };
 
-  const handleDeleteStudent = async (student: HistoricalRecord) => {
+
+  const handleDeleteStudent = (student: HistoricalRecord) => {
+    setStudentToDelete(student);
+    setShowDeleteModal(true);
+  };
+   const confirmDelete = async () => {
+    if (!studentToDelete || !studentToDelete.id) return;
+
     try {
-      await deleteHistoricalStudent(student.id); // DELETE en Supabase
-      removeStudent(student);                    // opcional: sync rápido en front
-      await refreshStudents();                   // recarga desde BD
+      await deleteHistoricalStudent(studentToDelete.id); // DELETE en BD
+      removeStudent(studentToDelete);                    // sync rápido en front
+      await refreshStudents();                           // recarga desde BD
+
+      // ✅ alerta de éxito
+      setAlertModal({
+        type: "success",
+        title: "Alumno eliminado",
+        message:
+          "El alumno fue eliminado correctamente del historial académico.",
+      });
     } catch (err) {
       console.error("Error al eliminar alumno:", err);
+
+      // ❌ alerta de error
+      setAlertModal({
+        type: "error",
+        title: "Error al eliminar alumno",
+        message:
+          "No se pudo eliminar al alumno del historial. Intenta nuevamente más tarde.",
+      });
+    } finally {
+      setShowDeleteModal(false);
+      setStudentToDelete(null);
     }
   };
 
 
   const handleEditRecord = (record: HistoricalRecord) => {
     setEditingRecord(record);
+    setEditMode("edit");     // 👈 marcamos modo edición
     setIsModalOpen(true);
   };
 
-  async function handleSave(data: HistoricalFormData) {
-    // 👉 aquí NO atrapamos el error, dejamos que suba al modal
-    if (editingRecord && editingRecord.id && editingRecord.id !== 0) {
-      // EDITAR en BD
-      await updateHistoricalStudent(editingRecord.id, data);
-    } else {
-      // CREAR en BD
-      await createHistoricalStudent(data);
-    }
+  async function handleSave(data: HistoricalFormData): Promise<void> {
+    try {
+      if (
+        editMode === "edit" &&
+        editingRecord &&
+        editingRecord.id &&
+        editingRecord.id !== 0
+      ) {
+        // EDITAR en BD
+        await updateHistoricalStudent(editingRecord.id, data);
 
-    // Si todo salió bien, recargamos la tabla desde Supabase
-    await refreshStudents();
+        setAlertModal({
+          type: "success",
+          title: "Alumno actualizado",
+          message: "Los cambios se guardaron correctamente en el historial.",
+        });
+      } else {
+        // CREAR en BD
+        await createHistoricalStudent(data);
+
+        setAlertModal({
+          type: "success",
+          title: "Alumno creado",
+          message: "El alumno se registró correctamente en el historial.",
+        });
+      }
+
+      await refreshStudents();
+      // El modal se cierra desde EditModal al terminar bien
+    } catch (error) {
+      console.error("Error en handleSave (historial):", error);
+
+      setAlertModal({
+        type: "error",
+        title: "Error al guardar",
+        message:
+          "Ocurrió un error al guardar los datos del alumno. Intenta de nuevo más tarde.",
+      });
+
+      throw error; // para que el modal muestre su error interno también
+    }
   }
+
+  
 
   // Opciones únicas para filtros extra
   const planOptions = Array.from(
@@ -452,23 +566,22 @@ export function HistoricalReportView() {
             </Button>
 
             <Button
-            onClick={() => {
-              const emptyRecord = {
-                id: 0, // id dummy, el backend luego pondrá el real al crear
-                nombre: "",
-                email: "",
-                matricula: "",
-                expediente: "",
-                estadoAcademico: "ACTIVO",
-                // el resto de campos faltantes se quedarán como undefined
-                // y el modal solo mostrará los que tengas en inputs
-              } as unknown as HistoricalRecord;
+                onClick={() => {
+                  const emptyRecord = {
+                    id: 0, // id dummy, el backend pone el real al crear
+                    nombre: "",
+                    email: "",
+                    matricula: "",
+                    expediente: "",
+                    estadoAcademico: "ACTIVO",
+                  } as unknown as HistoricalRecord;
 
-              setEditingRecord(emptyRecord);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700"
-            >
+                  setEditingRecord(emptyRecord);
+                  setEditMode("create");   // 👈 marcamos modo creación
+                  setIsModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700"
+              >
               <svg
                 className="w-4 h-4"
                 fill="none"
@@ -496,15 +609,15 @@ export function HistoricalReportView() {
           />
         </div>
         {isModalOpen && (
-          <EditModal
-            record={editingRecord ?? {}}
-            mode={editingRecord?.id ? "edit" : "create"}
-            onSave={handleSave}
-            onClose={() => {
-              setIsModalOpen(false);
-              setEditingRecord(null);
-            }}
-          />
+           <EditModal
+              record={editingRecord ?? {}}
+              mode={editMode}   // 👈 ya no depende del id
+              onSave={handleSave}
+              onClose={() => {
+                setIsModalOpen(false);
+                setEditingRecord(null);
+              }}
+            />
         )}
 
         {/* Pagination and Export */}
@@ -618,10 +731,144 @@ export function HistoricalReportView() {
               Exportar
             </Button>
           </div>
+          {/* Modal de confirmación de borrado */}
+          {showDeleteModal && studentToDelete && (
+            <Modal
+              isOpen={showDeleteModal}
+              onClose={() => setShowDeleteModal(false)}
+              title=""
+            >
+              <div className="text-center pt-1 py-4 px-8">
+                <div className="mb-4">
+                  <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M16.875 3.75H13.75V3.125C13.75 2.62772 13.5525 2.15081 13.2008 1.79917C12.8492 1.44754 12.3723 1.25 11.875 1.25H8.125C7.62772 1.25 7.15081 1.44754 6.79917 1.79917C6.44754 2.15081 6.25 2.62772 6.25 3.125V3.75H3.125C2.95924 3.75 2.80027 3.81585 2.68306 3.93306C2.56585 4.05027 2.5 4.20924 2.5 4.375C2.5 4.54076 2.56585 4.69973 2.68306 4.81694C2.80027 4.93415 2.95924 5 3.125 5H3.75V16.25C3.75 16.5815 3.8817 16.8995 4.11612 17.1339C4.35054 17.3683 4.66848 17.5 5 17.5H15C15.3315 17.5 15.6495 17.3683 15.8839 17.1339C16.1183 16.8995 16.25 16.5815 16.25 16.25V5H16.875C17.0408 5 17.1997 4.93415 17.3169 4.81694C17.4342 4.69973 17.5 4.54076 17.5 4.375C17.5 4.20924 17.4342 4.05027 17.3169 3.93306C17.1997 3.81585 17.0408 3.75 16.875 3.75ZM7.5 3.125C7.5 2.95924 7.56585 2.80027 7.68306 2.68306C7.80027 2.56585 7.95924 2.5 8.125 2.5H11.875C12.0408 2.5 12.1997 2.56585 12.3169 2.68306C12.4342 2.80027 12.5 2.95924 12.5 3.125V3.75H7.5V3.125ZM15 16.25H5V5H15V16.25ZM8.75 8.125V13.125C8.75 13.2908 8.68415 13.4497 8.56694 13.5669C8.44973 13.6842 8.29076 13.75 8.125 13.75C7.95924 13.75 7.80027 13.6842 7.68306 13.5669C7.56585 13.4497 7.5 13.2908 7.5 13.125V8.125C7.5 7.95924 7.56585 7.80027 7.68306 7.68306C7.80027 7.56585 7.95924 7.5 8.125 7.5C8.29076 7.5 8.44973 7.56585 8.56694 7.68306C8.68415 7.80027 8.75 7.95924 8.75 8.125ZM12.5 8.125V13.125C12.5 13.2908 12.4342 13.4497 12.3169 13.5669C12.1997 13.6842 12.0408 13.75 11.875 13.75C11.7092 13.75 11.5503 13.6842 11.4331 13.5669C11.3158 13.4497 11.25 13.2908 11.25 13.125V8.125C11.25 7.95924 11.3158 7.80027 11.4331 7.68306C11.5503 7.56585 11.7092 7.5 11.875 7.5C12.0408 7.5 12.1997 7.56585 12.3169 7.68306C12.4342 7.80027 12.5 7.95924 12.5 8.125Z"
+                        fill="#DC3545"
+                      />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Eliminar alumno
+                </h3>
+                <div className="mx-4">
+                  <p className="text-sm text-gray-600">
+                    ¿Estás seguro de que quieres eliminar este alumno del historial?
+                  </p>
+                  <p className="text-sm text-gray-600 mb-8">
+                    Esta acción es permanente y no se podrá deshacer.
+                  </p>
+                </div>
+                <div className="flex justify-end space-x-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-8 rounded-2xl py-2 text-sm"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={confirmDelete}
+                    className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-2xl py-2 text-sm"
+                  >
+                    Eliminar
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {/* Alert Modal (éxito / error) */}
+          {alertModal && (
+            <Modal
+              isOpen={!!alertModal}
+              onClose={() => setAlertModal(null)}
+              title=""
+            >
+              <div className="text-center pt-1 py-4 px-8">
+                <div className="mb-4">
+                  <div
+                    className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                      alertModal.type === "success" ? "bg-green-100" : "bg-red-100"
+                    }`}
+                  >
+                    {alertModal.type === "success" ? (
+                      // Ícono de check
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M9 12.5L11 14.5L15 10.5"
+                          stroke="#16A34A"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          stroke="#16A34A"
+                          strokeWidth="1.5"
+                        />
+                      </svg>
+                    ) : (
+                      // Ícono rojo similar al de eliminar
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M16.875 3.75H13.75V3.125C13.75 2.62772 13.5525 2.15081 13.2008 1.79917C12.8492 1.44754 12.3723 1.25 11.875 1.25H8.125C7.62772 1.25 7.15081 1.44754 6.79917 1.79917C6.44754 2.15081 6.25 2.62772 6.25 3.125V3.75H3.125C2.95924 3.75 2.80027 3.81585 2.68306 3.93306C2.56585 4.05027 2.5 4.20924 2.5 4.375C2.5 4.54076 2.56585 4.69973 2.68306 4.81694C2.80027 4.93415 2.95924 5 3.125 5H3.75V16.25C3.75 16.5815 3.8817 16.8995 4.11612 17.1339C4.35054 17.3683 4.66848 17.5 5 17.5H15C15.3315 17.5 15.6495 17.3683 15.8839 17.1339C16.1183 16.8995 16.25 16.5815 16.25 16.25V5H16.875C17.0408 5 17.1997 4.93415 17.3169 4.81694C17.4342 4.69973 17.5 4.54076 17.5 4.375C17.5 4.20924 17.4342 4.05027 17.3169 3.93306C17.1997 3.81585 17.0408 3.75 16.875 3.75ZM7.5 3.125C7.5 2.95924 7.56585 2.80027 7.68306 2.68306C7.80027 2.56585 7.95924 2.5 8.125 2.5H11.875C12.0408 2.5 12.1997 2.56585 12.3169 2.68306C12.4342 2.80027 12.5 2.95924 12.5 3.125V3.75H7.5V3.125ZM15 16.25H5V5H15V16.25ZM8.75 8.125V13.125C8.75 13.2908 8.68415 13.4497 8.56694 13.5669C8.44973 13.6842 8.29076 13.75 8.125 13.75C7.95924 13.75 7.80027 13.6842 7.68306 13.5669C7.56585 13.4497 7.5 13.2908 7.5 13.125V8.125C7.5 7.95924 7.56585 7.80027 7.68306 7.68306C7.80027 7.56585 7.95924 7.5 8.125 7.5C8.29076 7.5 8.44973 7.56585 8.56694 7.68306C8.68415 7.80027 8.75 7.95924 8.75 8.125ZM12.5 8.125V13.125C12.5 13.2908 12.4342 13.4497 12.3169 13.5669C12.1997 13.6842 12.0408 13.75 11.875 13.75C11.7092 13.75 11.5503 13.6842 11.4331 13.5669C11.3158 13.4497 11.25 13.2908 11.25 13.125V8.125C11.25 7.95924 11.3158 7.80027 11.4331 7.68306C11.5503 7.56585 11.7092 7.5 11.875 7.5C12.0408 7.5 12.1997 7.56585 12.3169 7.68306C12.4342 7.80027 12.5 7.95924 12.5 8.125Z"
+                          fill="#DC3545"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {alertModal.title}
+                </h3>
+                <div className="mx-4">
+                  <p className="text-sm text-gray-600">{alertModal.message}</p>
+                </div>
+
+                <div className="flex justify-center mt-8">
+                  <Button
+                    onClick={() => setAlertModal(null)}
+                    className={`px-8 rounded-2xl py-2 text-sm ${
+                      alertModal.type === "success"
+                        ? "bg-[#16469B] hover:bg-[#0E325E] text-white"
+                        : "bg-red-600 hover:bg-red-700 text-white"
+                    }`}
+                  >
+                    Aceptar
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
         </div>
       </div>
     );
   }
+
+
 
   // Vista combinada: Upload + Historial
   if (showCombinedView) {
@@ -713,14 +960,20 @@ export function HistoricalReportView() {
                 type="file"
                 className="hidden"
                 accept=".csv,.xlsx,.xls"
-                onChange={handleUpload}
                 id="combined-file-upload"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    setUploadedFile(file);      // guardamos en estado
+                    void handleUpload(file);    // subimos de inmediato y dispara alertas
+                  }
+                }}
               />
               <label
                 htmlFor="combined-file-upload"
                 className="mt-4 inline-block px-6 py-2 text-sm font-medium text-white bg-[#144257] rounded-lg hover:bg-[#0f3240] cursor-pointer"
               >
-                Subir archivo
+                Subir
               </label>
             </div>
           </div>
@@ -809,6 +1062,84 @@ export function HistoricalReportView() {
           </div>
         </div>
         <div className="flex justify-between items-center px-3 pt-4 sm:pt-6 pb-4 border-t-2 border-[#16469B]"></div>
+        {/* Alert Modal (éxito / error) */}
+      {alertModal && (
+        <Modal
+          isOpen={!!alertModal}
+          onClose={() => setAlertModal(null)}
+          title=""
+        >
+          <div className="text-center pt-1 py-4 px-8">
+            <div className="mb-4">
+              <div
+                className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                  alertModal.type === "success" ? "bg-green-100" : "bg-red-100"
+                }`}
+              >
+                {alertModal.type === "success" ? (
+                  // Ícono de check
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 12.5L11 14.5L15 10.5"
+                      stroke="#16A34A"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      stroke="#16A34A"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                ) : (
+                  // Ícono rojo similar al de eliminar
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M16.875 3.75H13.75V3.125C13.75 2.62772 13.5525 2.15081 13.2008 1.79917C12.8492 1.44754 12.3723 1.25 11.875 1.25H8.125C7.62772 1.25 7.15081 1.44754 6.79917 1.79917C6.44754 2.15081 6.25 2.62772 6.25 3.125V3.75H3.125C2.95924 3.75 2.80027 3.81585 2.68306 3.93306C2.56585 4.05027 2.5 4.20924 2.5 4.375C2.5 4.54076 2.56585 4.69973 2.68306 4.81694C2.80027 4.93415 2.95924 5 3.125 5H3.75V16.25C3.75 16.5815 3.8817 16.8995 4.11612 17.1339C4.35054 17.3683 4.66848 17.5 5 17.5H15C15.3315 17.5 15.6495 17.3683 15.8839 17.1339C16.1183 16.8995 16.25 16.5815 16.25 16.25V5H16.875C17.0408 5 17.1997 4.93415 17.3169 4.81694C17.4342 4.69973 17.5 4.54076 17.5 4.375C17.5 4.20924 17.4342 4.05027 17.3169 3.93306C17.1997 3.81585 17.0408 3.75 16.875 3.75ZM7.5 3.125C7.5 2.95924 7.56585 2.80027 7.68306 2.68306C7.80027 2.56585 7.95924 2.5 8.125 2.5H11.875C12.0408 2.5 12.1997 2.56585 12.3169 2.68306C12.4342 2.80027 12.5 2.95924 12.5 3.125V3.75H7.5V3.125ZM15 16.25H5V5H15V16.25ZM8.75 8.125V13.125C8.75 13.2908 8.68415 13.4497 8.56694 13.5669C8.44973 13.6842 8.29076 13.75 8.125 13.75C7.95924 13.75 7.80027 13.6842 7.68306 13.5669C7.56585 13.4497 7.5 13.2908 7.5 13.125V8.125C7.5 7.95924 7.56585 7.80027 7.68306 7.68306C7.80027 7.56585 7.95924 7.5 8.125 7.5C8.29076 7.5 8.44973 7.56585 8.56694 7.68306C8.68415 7.80027 8.75 7.95924 8.75 8.125ZM12.5 8.125V13.125C12.5 13.2908 12.4342 13.4497 12.3169 13.5669C12.1997 13.6842 12.0408 13.75 11.875 13.75C11.7092 13.75 11.5503 13.6842 11.4331 13.5669C11.3158 13.4497 11.25 13.2908 11.25 13.125V8.125C11.25 7.95924 11.3158 7.80027 11.4331 7.68306C11.5503 7.56585 11.7092 7.5 11.875 7.5C12.0408 7.5 12.1997 7.56585 12.3169 7.68306C12.4342 7.80027 12.5 7.95924 12.5 8.125Z"
+                      fill="#DC3545"
+                    />
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {alertModal.title}
+            </h3>
+            <div className="mx-4">
+              <p className="text-sm text-gray-600">{alertModal.message}</p>
+            </div>
+
+            <div className="flex justify-center mt-8">
+              <Button
+                onClick={() => setAlertModal(null)}
+                className={`px-8 rounded-2xl py-2 text-sm ${
+                  alertModal.type === "success"
+                    ? "bg-[#16469B] hover:bg-[#0E325E] text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+              >
+                Aceptar
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
       </div>
     );
   }
@@ -917,7 +1248,7 @@ export function HistoricalReportView() {
                       type="file"
                       className="hidden"
                       accept=".csv,.xlsx,.xls"
-                      onChange={() => handleUpload()}
+                      onChange={handleFileSelect}
                       id="modal-file-upload"
                     />
                     <label
@@ -940,13 +1271,91 @@ export function HistoricalReportView() {
                   Cancelar
                 </Button>
                 <Button
-                  onClick={handleUpload}
+                  onClick={() => handleUpload()}
                   disabled={!uploadedFile}
                   className="px-6 py-2 bg-[#2E4258] rounded-3xl text-white "
                 >
-                  Subir
+                  Subir Archivo
                 </Button>
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {/* Alert Modal (éxito / error) */}
+      {alertModal && (
+        <Modal
+          isOpen={!!alertModal}
+          onClose={() => setAlertModal(null)}
+          title=""
+        >
+          <div className="text-center pt-1 py-4 px-8">
+            <div className="mb-4">
+              <div
+                className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                  alertModal.type === "success" ? "bg-green-100" : "bg-red-100"
+                }`}
+              >
+                {alertModal.type === "success" ? (
+                  // Ícono de check
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 12.5L11 14.5L15 10.5"
+                      stroke="#16A34A"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      stroke="#16A34A"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                ) : (
+                  // Ícono rojo similar al de eliminar
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M16.875 3.75H13.75V3.125C13.75 2.62772 13.5525 2.15081 13.2008 1.79917C12.8492 1.44754 12.3723 1.25 11.875 1.25H8.125C7.62772 1.25 7.15081 1.44754 6.79917 1.79917C6.44754 2.15081 6.25 2.62772 6.25 3.125V3.75H3.125C2.95924 3.75 2.80027 3.81585 2.68306 3.93306C2.56585 4.05027 2.5 4.20924 2.5 4.375C2.5 4.54076 2.56585 4.69973 2.68306 4.81694C2.80027 4.93415 2.95924 5 3.125 5H3.75V16.25C3.75 16.5815 3.8817 16.8995 4.11612 17.1339C4.35054 17.3683 4.66848 17.5 5 17.5H15C15.3315 17.5 15.6495 17.3683 15.8839 17.1339C16.1183 16.8995 16.25 16.5815 16.25 16.25V5H16.875C17.0408 5 17.1997 4.93415 17.3169 4.81694C17.4342 4.69973 17.5 4.54076 17.5 4.375C17.5 4.20924 17.4342 4.05027 17.3169 3.93306C17.1997 3.81585 17.0408 3.75 16.875 3.75ZM7.5 3.125C7.5 2.95924 7.56585 2.80027 7.68306 2.68306C7.80027 2.56585 7.95924 2.5 8.125 2.5H11.875C12.0408 2.5 12.1997 2.56585 12.3169 2.68306C12.4342 2.80027 12.5 2.95924 12.5 3.125V3.75H7.5V3.125ZM15 16.25H5V5H15V16.25ZM8.75 8.125V13.125C8.75 13.2908 8.68415 13.4497 8.56694 13.5669C8.44973 13.6842 8.29076 13.75 8.125 13.75C7.95924 13.75 7.80027 13.6842 7.68306 13.5669C7.56585 13.4497 7.5 13.2908 7.5 13.125V8.125C7.5 7.95924 7.56585 7.80027 7.68306 7.68306C7.80027 7.56585 7.95924 7.5 8.125 7.5C8.29076 7.5 8.44973 7.56585 8.56694 7.68306C8.68415 7.80027 8.75 7.95924 8.75 8.125ZM12.5 8.125V13.125C12.5 13.2908 12.4342 13.4497 12.3169 13.5669C12.1997 13.6842 12.0408 13.75 11.875 13.75C11.7092 13.75 11.5503 13.6842 11.4331 13.5669C11.3158 13.4497 11.25 13.2908 11.25 13.125V8.125C11.25 7.95924 11.3158 7.80027 11.4331 7.68306C11.5503 7.56585 11.7092 7.5 11.875 7.5C12.0408 7.5 12.1997 7.56585 12.3169 7.68306C12.4342 7.80027 12.5 7.95924 12.5 8.125Z"
+                      fill="#DC3545"
+                    />
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {alertModal.title}
+            </h3>
+            <div className="mx-4">
+              <p className="text-sm text-gray-600">{alertModal.message}</p>
+            </div>
+
+            <div className="flex justify-center mt-8">
+              <Button
+                onClick={() => setAlertModal(null)}
+                className={`px-8 rounded-2xl py-2 text-sm ${
+                  alertModal.type === "success"
+                    ? "bg-[#16469B] hover:bg-[#0E325E] text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+              >
+                Aceptar
+              </Button>
             </div>
           </div>
         </Modal>

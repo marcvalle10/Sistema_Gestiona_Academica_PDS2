@@ -1,16 +1,20 @@
+// ScheduleRecord que llega desde la BD
 export interface ScheduleRecord {
-  id: number; 
+  id: number;
   periodo: string;
   codigo_materia: string;
   nombre_materia: string;
   grupo: string;
-  dia_semana: number;
-  hora_inicio: string;
-  hora_fin: string;
-  aula: string;
-  num_empleado?: number;
-  profesor_nombre?: string;
-  profesor_apellido_paterno?: string;
-  profesor_apellido_materno?: string;
-  cupo?: number;
+  dia_semana: number | null;
+  aula: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  num_empleado: number | null;
+  profesor_nombre: string | null;
+  profesor_apellido_paterno: string | null;
+  profesor_apellido_materno: string | null;
+  cupo: number | null;
 }
+
+// Datos para crear (sin id)
+export type CreateHorarioInput = Omit<ScheduleRecord, "id">;

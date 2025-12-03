@@ -13,6 +13,9 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
   const [formData, setFormData] = useState<Partial<HistoricalRecord>>(record);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ errores por campo
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -25,6 +28,14 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
           [name]: value,
         } as Partial<HistoricalRecord>)
     );
+
+    // limpiar error de ese campo cuando el usuario escribe
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const rest = { ...prev };
+      delete rest[name];
+      return rest;
+    });
   };
 
   const handleSave = async () => {
@@ -42,15 +53,40 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
       sexo: formData.sexo?.trim(),
     };
 
-    const faltantes = Object.entries(required)
-      .filter(([, v]) => !v)
-      .map(([k]) => k);
+    const newFieldErrors: Record<string, string> = {};
 
-    if (faltantes.length > 0) {
+    if (!required.matricula) {
+      newFieldErrors.matricula = "La matrícula es obligatoria.";
+    }
+    if (!required.expediente) {
+      newFieldErrors.expediente = "El expediente es obligatorio.";
+    }
+    if (!required.nombre) {
+      newFieldErrors.nombre = "El nombre completo es obligatorio.";
+    }
+    if (!required.email) {
+      newFieldErrors.email = "El correo institucional es obligatorio.";
+    }
+    if (!required.estadoAcademico) {
+      newFieldErrors.estadoAcademico = "Selecciona el estado académico.";
+    }
+    if (!required.nivelIngles) {
+      newFieldErrors.nivelIngles = "El nivel de inglés es obligatorio.";
+    }
+    if (!required.planEstudios) {
+      newFieldErrors.planEstudios = "El plan de estudios es obligatorio.";
+    }
+    if (!required.sexo) {
+      newFieldErrors.sexo = "El sexo es obligatorio.";
+    }
+
+    if (Object.keys(newFieldErrors).length > 0) {
+      setFieldErrors(newFieldErrors);
       setError("Completa todos los campos obligatorios marcados con *.");
       return;
     }
 
+    setFieldErrors({});
     setError(null);
 
     try {
@@ -98,8 +134,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="matricula"
               value={formData.matricula ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.matricula ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.matricula && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.matricula}
+              </p>
+            )}
           </div>
 
           {/* Expediente */}
@@ -112,8 +155,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="expediente"
               value={formData.expediente ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.expediente ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.expediente && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.expediente}
+              </p>
+            )}
           </div>
 
           {/* Nombre completo */}
@@ -126,8 +176,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="nombre"
               value={formData.nombre ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.nombre ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.nombre && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.nombre}
+              </p>
+            )}
           </div>
 
           {/* Correo institucional */}
@@ -140,8 +197,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="email"
               value={formData.email ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.email ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.email && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.email}
+              </p>
+            )}
           </div>
         </div>
 
@@ -156,12 +220,21 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="estadoAcademico"
               value={formData.estadoAcademico ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs bg-white"
+              className={`w-full rounded-md px-2 py-1 text-xs bg-white border ${
+                fieldErrors.estadoAcademico
+                  ? "border-red-400"
+                  : "border-gray-300"
+              }`}
             >
               <option value="">Selecciona...</option>
               <option value="ACTIVO">ACTIVO</option>
               <option value="INACTIVO">INACTIVO</option>
             </select>
+            {fieldErrors.estadoAcademico && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.estadoAcademico}
+              </p>
+            )}
           </div>
 
           {/* Nivel de inglés (ING) */}
@@ -175,8 +248,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               placeholder="Ej. B1, B2, C1..."
               value={formData.nivelIngles ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.nivelIngles ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.nivelIngles && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.nivelIngles}
+              </p>
+            )}
           </div>
 
           {/* Plan de estudios */}
@@ -189,8 +269,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               name="planEstudios"
               value={formData.planEstudios ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.planEstudios ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.planEstudios && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.planEstudios}
+              </p>
+            )}
           </div>
 
           {/* Sexo */}
@@ -204,8 +291,15 @@ export function EditModal({ record, mode, onClose, onSave }: EditModalProps) {
               placeholder="M, F, Otro..."
               value={formData.sexo ?? ""}
               onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              className={`w-full rounded-md px-2 py-1 text-xs border ${
+                fieldErrors.sexo ? "border-red-400" : "border-gray-300"
+              }`}
             />
+            {fieldErrors.sexo && (
+              <p className="mt-1 text-[10px] text-red-600">
+                {fieldErrors.sexo}
+              </p>
+            )}
           </div>
         </div>
 

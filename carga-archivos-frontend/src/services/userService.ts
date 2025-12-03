@@ -274,24 +274,22 @@ export async function createProfesor(
   const { nombre, apellido_paterno, apellido_materno } =
     splitNombreCompleto(nombreCompleto);
 
-  // 1) Crear usuario (password_hash TEMPORAL para luego usar tu script de crypt)
-  const { data: usuarioData, error: usuarioError } = await supabase
-    .from("usuario")
-    .insert([
-      {
-        email: correo,
-        password_hash: "TEMPORAL",
-      },
-    ])
-    .select("id, email")
-    .single();
+  // 1) Crear usuario en BD con contraseña cifrada = numEmpleado
+  const { data: usuarioData, error: usuarioError } = await supabase.rpc(
+    "crear_usuario_con_password",
+    {
+      p_email: correo,
+      p_password: String(numEmpleado),
+    }
+  );
 
-  if (usuarioError || !usuarioData) {
+  if (usuarioError || usuarioData == null) {
     console.error("Error al crear usuario:", usuarioError);
     throw usuarioError ?? new Error("No se pudo crear usuario");
   }
 
-  const usuarioId = usuarioData.id as number;
+  // rpc devuelve el ID del usuario (INTEGER)
+  const usuarioId = usuarioData as number;
 
   // 2) Crear profesor
   const { data: profesorData, error: profesorError } = await supabase
@@ -306,7 +304,9 @@ export async function createProfesor(
         usuario_id: usuarioId,
       },
     ])
-    .select("id, nombre, apellido_paterno, apellido_materno, correo, num_empleado")
+    .select(
+      "id, nombre, apellido_paterno, apellido_materno, correo, num_empleado"
+    )
     .single();
 
   if (profesorError || !profesorData) {
@@ -314,7 +314,7 @@ export async function createProfesor(
     throw profesorError ?? new Error("No se pudo crear profesor");
   }
 
-  // 3) Asignar rol
+  // 3) Asignar rol al usuario
   await updateUserRole(usuarioId, rolIdFinal);
 
   // 4) Obtener nombre del rol desde la BD
@@ -324,11 +324,11 @@ export async function createProfesor(
   const nombreCompletoProfesor = `${profesorData.nombre} ${profesorData.apellido_paterno} ${apMaternoProf}`.trim();
 
   const user: User = {
-    id: profesorData.id,
+    id: profesorData.id,              // id del profesor para la tabla de la vista
     profesorId: profesorData.id,
     usuarioId,
     nombre: nombreCompletoProfesor,
-    email: profesorData.correo ?? usuarioData.email,
+    email: profesorData.correo ?? correo, // usamos el correo que ya tenemos
     numEmpleado: profesorData.num_empleado,
     rol: rolNombre,
     rolId: rolIdFinal,
@@ -337,6 +337,7 @@ export async function createProfesor(
 
   return user;
 }
+
 
 /**
  * Actualiza usuario + profesor + rol en la BD

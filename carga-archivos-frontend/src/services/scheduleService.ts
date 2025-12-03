@@ -6,7 +6,7 @@ export interface ScheduleFilters {
 
 // Coincide con la vista vista_horarios_grupos
 type RawScheduleRow = {
-  id: number; // 
+  id: number; 
   periodo: string;
   codigo_materia: string;
   nombre_materia: string;
@@ -22,7 +22,7 @@ type RawScheduleRow = {
   cupo: number | null;
 };
 
-// IMPORTANTE: aquí NO metemos `/api`, como dijiste
+// IMPORTANTE: aquí NO metemos `/api`
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -71,23 +71,25 @@ export async function getHorarios(
   }
 
   // Adaptamos el row crudo de la vista a tu ScheduleRecord
-  return raw.map((row) => ({
-    id: row.id,
-    periodo: row.periodo,
-    codigo_materia: row.codigo_materia,
-    nombre_materia: row.nombre_materia,
-    grupo: row.grupo,
-    dia_semana: row.dia_semana,
-    hora_inicio: row.hora_inicio,
-    hora_fin: row.hora_fin,
-    aula: row.aula,
-    num_empleado: row.num_empleado ?? undefined,
-    profesor_nombre: row.profesor_nombre ?? undefined,
-    profesor_apellido_paterno: row.profesor_apellido_paterno ?? undefined,
-    profesor_apellido_materno: row.profesor_apellido_materno ?? undefined,
-    cupo: row.cupo ?? undefined,
-  }));
-
+  return raw.map(
+    (row): ScheduleRecord => ({
+      id: row.id,
+      periodo: row.periodo,
+      codigo_materia: row.codigo_materia,
+      nombre_materia: row.nombre_materia,
+      grupo: row.grupo,
+      dia_semana: row.dia_semana,
+      hora_inicio: row.hora_inicio,
+      hora_fin: row.hora_fin,
+      aula: row.aula,
+      // OJO: aquí respetamos el tipo number | null, nada de undefined
+      num_empleado: row.num_empleado,
+      profesor_nombre: row.profesor_nombre,
+      profesor_apellido_paterno: row.profesor_apellido_paterno,
+      profesor_apellido_materno: row.profesor_apellido_materno,
+      cupo: row.cupo,
+    })
+  );
 }
 
 /**
@@ -112,7 +114,8 @@ export async function createHorario(
     );
   }
 
-  return res.json();
+  const json = (await res.json()) as ScheduleRecord;
+  return json;
 }
 
 /**
@@ -138,7 +141,8 @@ export async function updateHorario(
     );
   }
 
-  return res.json();
+  const json = (await res.json()) as ScheduleRecord;
+  return json;
 }
 
 /**

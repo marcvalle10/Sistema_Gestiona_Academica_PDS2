@@ -91,8 +91,27 @@ export default function StudentProfilePage() {
     fetchStudentData();
   }, [expedienteParam]);
 
+  // --- FUNCIÓN CORREGIDA AQUÍ ---
   const handleOpenStudentView = () => {
     if (!studentData) return;
+    
+    // 1. Guardar en LocalStorage explícitamente antes de abrir
+    try {
+        console.log("Intentando guardar datos del alumno en LocalStorage...", studentData);
+        
+        // Usamos una clave genérica, asegúrate de que el OTRO equipo use la misma clave ('student_kardex')
+        localStorage.setItem('student_kardex', JSON.stringify(studentData));
+        
+        // También guardamos solo el expediente por si acaso
+        localStorage.setItem('student_expediente', studentData.expediente);
+        
+        console.log("¡Datos guardados con éxito!");
+    } catch (error) {
+        console.error("Error al guardar en LocalStorage (posible bloqueo de navegador):", error);
+        alert("Advertencia: No se pudo guardar la sesión localmente. Revisa la configuración de privacidad.");
+    }
+
+    // 2. Abrir la ventana
     const targetUrl = `${ALUMNOS_FRONTEND_URL}/kardex?expediente=${studentData.expediente}`;
     window.open(targetUrl, "_blank");
   };

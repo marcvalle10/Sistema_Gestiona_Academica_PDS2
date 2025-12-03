@@ -1,6 +1,6 @@
 // src/services/ingestaAsistencia.ts
-import { AppDataSource } from '../config/data-source';
-import { FilaAsistencia, MetaAsistencia } from '../utils/parseAsistencia';
+import { AppDataSource } from "../config/data-source";
+import { FilaAsistencia, MetaAsistencia } from "../utils/parseAsistencia";
 
 export type IngestaAsistenciaResumen = {
   ok: boolean;
@@ -22,9 +22,9 @@ export async function ingestaAsistencia(
 ): Promise<IngestaAsistenciaResumen> {
   const warnings: string[] = [];
 
-  const etiqueta = (periodoEtiqueta || '').trim();
+  const etiqueta = (periodoEtiqueta || "").trim();
   if (!etiqueta) {
-    throw new Error('periodoEtiqueta vacío en ingestaAsistencia');
+    throw new Error("periodoEtiqueta vacío en ingestaAsistencia");
   }
 
   // 1) Resolver periodo_id
@@ -43,11 +43,12 @@ export async function ingestaAsistencia(
 
   if (!meta.materiaCodigo) {
     warnings.push(
-      'meta.materiaCodigo es nulo; no se puede resolver el grupo desde la lista de asistencia.'
+      "meta.materiaCodigo es nulo; no se puede resolver el grupo desde la lista de asistencia."
     );
   } else {
-    const claveGrupo = (meta.grupoTexto || '').trim();
+    const claveGrupo = (meta.grupoTexto || "").trim();
 
+    // 2.1) Intentar encontrar grupo exacto por periodo + materiaCodigo + clave_grupo
     if (claveGrupo) {
       const gRes = await AppDataSource.query(
         `SELECT g.id
@@ -68,7 +69,7 @@ export async function ingestaAsistencia(
       }
     }
 
-    // Fallback: si no se encontró por clave_grupo, intentar agarrar
+    // 2.2) Fallback: si no se encontró por clave_grupo, intentar agarrar
     // el único grupo de esa materia y periodo (si sólo hay uno)
     if (!grupoId) {
       const gRes2 = await AppDataSource.query(
@@ -91,9 +92,44 @@ export async function ingestaAsistencia(
           `Hay múltiples grupos para materiaCodigo="${meta.materiaCodigo}" en periodo="${etiqueta}" y no se pudo determinar cuál usar.`
         );
       } else {
+        // 2.3) NO HAY NINGÚN GRUPO → crear uno nuevo
         warnings.push(
-          `No hay ningún grupo en BD para materiaCodigo="${meta.materiaCodigo}" en periodo="${etiqueta}".`
+          `No hay ningún grupo en BD para materiaCodigo="${meta.materiaCodigo}" en periodo="${etiqueta}". Se intentará crear uno automáticamente.`
         );
+
+        // Buscar materia por código
+        const matRes = await AppDataSource.query(
+          `SELECT id FROM public.materia WHERE codigo = $1`,
+          [meta.materiaCodigo]
+        );
+        const materiaId: number | null = matRes[0]?.id ?? null;
+
+        if (!materiaId) {
+          warnings.push(
+            `No se encontró materia con codigo="${meta.materiaCodigo}", no se pudo crear el grupo automáticamente.`
+          );
+        } else {
+          const claveGrupoNueva = claveGrupo || "GRUPO_LISTA_ASISTENCIA";
+
+          const nuevoGrupo = await AppDataSource.query(
+            `INSERT INTO public.grupo (periodo_id, materia_id, clave_grupo)
+             VALUES ($1, $2, $3)
+             RETURNING id`,
+            [periodoId, materiaId, claveGrupoNueva]
+          );
+
+          grupoId = nuevoGrupo[0]?.id ?? null;
+
+          if (grupoId) {
+            warnings.push(
+              `Se creó automáticamente el grupo con id=${grupoId} para materiaCodigo="${meta.materiaCodigo}", periodo="${etiqueta}", clave_grupo="${claveGrupoNueva}".`
+            );
+          } else {
+            warnings.push(
+              `No se pudo crear el grupo automáticamente para materiaCodigo="${meta.materiaCodigo}" en periodo="${etiqueta}".`
+            );
+          }
+        }
       }
     }
   }
@@ -105,7 +141,7 @@ export async function ingestaAsistencia(
 
   // 3) Procesar cada fila de la lista de asistencia
   for (const fila of rows) {
-    const expediente = (fila.expediente || '').trim();
+    const expediente = (fila.expediente || "").trim();
 
     if (!expediente) {
       warnings.push(`Fila ${fila.rowIndex}: expediente vacío, se omite.`);
@@ -145,7 +181,7 @@ export async function ingestaAsistencia(
       inscripcionesCreadas++;
     }
 
-    // 3.3) Asociar alumno al grupo (si logramos resolver grupoId)
+    // 3.3) Asociar alumno al grupo (si logramos resolver/crear grupoId)
     if (!grupoId) {
       alumnosSinGrupo++;
       continue;

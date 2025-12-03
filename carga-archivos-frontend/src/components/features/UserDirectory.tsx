@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Bentham } from "next/font/google";
 import { Button, Modal } from "@/components/ui";
 import { Pagination } from "@/components/shared";
@@ -10,6 +10,12 @@ const bentham = Bentham({
   weight: "400",
   subsets: ["latin"],
 });
+
+type AlertState = {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+} | null;
 
 export function UserDirectory() {
   const {
@@ -44,6 +50,69 @@ export function UserDirectory() {
     submitCreateProfesor,
     submitEditProfesor,
   } = useUserDirectory();
+
+  const [alert, setAlert] = useState<AlertState>(null);
+
+  const handleSubmitCreate = async () => {
+    try {
+      await submitCreateProfesor();
+      setShowCreateModal(false);
+      setAlert({
+        kind: "success",
+        title: "Profesor creado",
+        message: "El profesor se creó correctamente.",
+      });
+    } catch (error) {
+      console.error("Error al crear profesor:", error);
+      setAlert({
+        kind: "error",
+        title: "Error al crear profesor",
+        message:
+          "Ocurrió un error al crear el profesor. Intenta nuevamente más tarde.",
+      });
+    }
+  };
+
+  const handleSubmitEdit = async () => {
+    try {
+      await submitEditProfesor();
+      setShowEditModal(false);
+      setAlert({
+        kind: "success",
+        title: "Profesor actualizado",
+        message:
+          "Los datos del profesor se actualizaron correctamente.",
+      });
+    } catch (error) {
+      console.error("Error al editar profesor:", error);
+      setAlert({
+        kind: "error",
+        title: "Error al editar profesor",
+        message:
+          "Ocurrió un error al actualizar el profesor. Intenta nuevamente más tarde.",
+      });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await confirmDelete();
+      setShowDeleteModal(false);
+      setAlert({
+        kind: "success",
+        title: "Usuario eliminado",
+        message: "El usuario se eliminó correctamente.",
+      });
+    } catch (error) {
+      console.error("Error al eliminar usuario:", error);
+      setAlert({
+        kind: "error",
+        title: "Error al eliminar usuario",
+        message:
+          "Ocurrió un error al eliminar el usuario. Intenta nuevamente más tarde.",
+      });
+    }
+  };
 
   return (
     <>
@@ -154,16 +223,16 @@ export function UserDirectory() {
                   Rol
                 </label>
                 <select
-                  name="rolId"
-                  value={formValues.rolId}
-                  onChange={handleFormChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="">Selecciona un rol</option>
-                  <option value={1}>Administrador</option>
-                  <option value={2}>Coordinador</option>
-                  <option value={3}>Profesor</option>
-                </select>
+                name="rolId"
+                value={formValues.rolId}
+                onChange={handleFormChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">Selecciona un rol</option>
+                <option value={1}>Administrador</option>
+                <option value={2}>Coordinador</option>
+                <option value={3}>Profesor</option>
+              </select>
               </div>
             </div>
 
@@ -176,7 +245,7 @@ export function UserDirectory() {
                 Cancelar
               </Button>
               <Button
-                onClick={submitEditProfesor}
+                onClick={handleSubmitEdit}
                 className="bg-[#16469B] hover:bg-[#123a7f] text-white px-6 rounded-2xl py-2 text-sm"
               >
                 Guardar cambios
@@ -265,7 +334,7 @@ export function UserDirectory() {
                 Cancelar
               </Button>
               <Button
-                onClick={submitCreateProfesor}
+                onClick={handleSubmitCreate}
                 className="bg-[#16469B] hover:bg-[#123a7f] text-white px-6 rounded-2xl py-2 text-sm"
               >
                 Guardar
@@ -285,7 +354,6 @@ export function UserDirectory() {
           <div className="text-center pt-1 py-4 px-8">
             <div className="mb-4">
               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                {/* ícono de basura */}
                 <svg
                   width="24"
                   height="24"
@@ -320,7 +388,7 @@ export function UserDirectory() {
                 Cancelar
               </Button>
               <Button
-                onClick={confirmDelete}
+                onClick={handleConfirmDelete}
                 className="bg-red-600 hover:bg-red-700 text-white px-8 rounded-2xl py-2 text-sm"
               >
                 Eliminar
@@ -329,6 +397,93 @@ export function UserDirectory() {
           </div>
         </Modal>
       )}
+
+            {/* Modal de alerta genérico (éxito / error) */}
+      {alert && (
+        <Modal isOpen={!!alert} onClose={() => setAlert(null)} title="">
+          <div className="text-center pt-1 py-4 px-8">
+            <div className="mb-4">
+              <div
+                className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                  alert.kind === "success" ? "bg-green-100" : "bg-red-100"
+                }`}
+              >
+                {alert.kind === "success" ? (
+                  // Ícono de check
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 12.75L11.25 15L15 9.75"
+                      stroke="#16A34A"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      stroke="#16A34A"
+                      strokeWidth="2"
+                    />
+                  </svg>
+                ) : (
+                  // Ícono de error
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M10 18.3333C14.025 18.3333 17.5 14.8583 17.5 10.8333C17.5 6.80833 14.025 3.33333 10 3.33333C5.975 3.33333 2.5 6.80833 2.5 10.8333C2.5 14.8583 5.975 18.3333 10 18.3333Z"
+                      stroke="#DC2626"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M10 7.5V11.25"
+                      stroke="#DC2626"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M10 14.1667H10.0083"
+                      stroke="#DC2626"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {alert.title}
+            </h3>
+            <p className="text-sm text-gray-600 mb-8">{alert.message}</p>
+
+            <div className="flex justify-center">
+              <Button
+                onClick={() => setAlert(null)}
+                className="px-8 rounded-2xl py-2 text-sm bg-[#16469B] hover:bg-[#123a7f] text-white"
+              >
+                Aceptar
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </>
   );
 }
