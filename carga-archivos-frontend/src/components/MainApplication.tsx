@@ -85,7 +85,7 @@ export function MainApplication() {
       if (inactivityTimeout) clearTimeout(inactivityTimeout);
       inactivityTimeout = setTimeout(() => {
         logout();
-      }, 3 * 60 * 1000); // 3 minutos
+      }, 20 * 60 * 1000); // 3 minutos
     };
 
     const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
